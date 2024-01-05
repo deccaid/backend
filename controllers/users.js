@@ -6,14 +6,23 @@ const NotFound = require('../error/notFound');
 const Conflict = require('../error/conflict');
 const httpStatusCodes = require('../error/errors');
 
-const STATUS_OK = 200;
+const login = (req, res, next) => {
+  const { email, password } = req.body;
+  userModel.findUser(email, password).then((user) => {
+    const token = jwt.sign({ id: user._id }, 'yandex', { expiresIn: '7d' });
+    res.cookie('jwt', token, { maxAge: 1000 * 3600 * 24 * 7, httpOnly: true, domain: '.localhost' });
+    res.status(200).send({ id: user._id });
+  })
+    .catch((err) => {
+      if (err.name === 'Unauthorized') res.status(httpStatusCodes.UNAUTHORIZED).send({ message: err.message });
+      next(err);
+    });
+};
 
 // получить всех пользователя
 const getUsers = (req, res, next) => {
-  userModel.find()
-    .then((users) => res
-      .status(STATUS_OK)
-      .send(users))
+  userModel.find({})
+    .then((users) => res.send({ users }))
     .catch(next);
 };
 
@@ -58,65 +67,43 @@ const createUser = (req, res, next) => {
 };
 
 // обновить информацию о пользователе
-const updateUserInfo = (req, res) => {
+const updateUserInfo = (req, res, next) => {
   const { name, about } = req.body;
-  console.log(req.user);
-  userModel.findByIdAndUpdate(req.user._id, { name, about }, { runValidators: true, new: true })
+  userModel.findByIdAndUpdate(req.user.id, { name, about }, { new: true, runValidators: true })
     .then((user) => {
-      res
-        .status(STATUS_OK)
-        .send(user);
-    })
-    .catch((error) => {
-      if (error.name === 'ValidationError') {
-        return res
-          .status(httpStatusCodes.status)
-          .send({ message: httpStatusCodes.message });
-      } if (error.message === 'notValidId') {
-        res
-          .status(httpStatusCodes.status)
-          .send({ message: httpStatusCodes.message });
+      if (user) {
+        res.send({ user });
+      } else {
+        throw new NotFound('User with current _id can\'t be found!');
       }
-      return res
-        .status(httpStatusCodes.status)
-        .send({ message: httpStatusCodes.message });
+    })
+    .catch((err) => {
+      if (err.name === 'CastError') {
+        next(new BadRequest('Bad request!'));
+      }
+      next(err);
     });
 };
 
 // обновить аватар пользователя
-const updateUserAvatar = (req, res) => {
+const updateUserAvatar = (req, res, next) => {
   const { avatar } = req.body;
-  console.log(req.user);
-  userModel.findByIdAndUpdate(req.user._id, { avatar }, { runValidators: true, new: true })
+  userModel.findByIdAndUpdate(req.user.id, { avatar }, { new: true, runValidators: true })
     .then((user) => {
-      res.status(STATUS_OK).send(user);
-    })
-    .catch((error) => {
-      if (error.name === 'CastError') {
-        return res
-          .status(httpStatusCodes.status)
-          .send({ message: httpStatusCodes.message });
-      } if (error.message === 'notValidId') {
-        res
-          .status(httpStatusCodes.status)
-          .send({ message: httpStatusCodes.message });
+      if (user) {
+        res.send({ user });
+      } else {
+        throw new NotFound('User with current _id can\'t be found!');
       }
-      return res
-        .status(httpStatusCodes.status)
-        .send({ message: httpStatusCodes.message });
+    })
+    .catch((err) => {
+      if (err.name === 'CastError') {
+        res.status(httpStatusCodes.BAD_REQUEST).send({ message: 'Bad request!' });
+      }
+      next(err);
     });
 };
 
-function login(req, res, next) {
-  const { email, password } = req.body;
-
-  return userModel.findUserByCredentials(email, password)
-    .then((user) => {
-      const token = jwt.sign({ _id: user._id }, 'yandex-praktikum', { expiresIn: '7d' });
-      res.send({ token });
-    })
-    .catch(next);
-}
 const getMe = (req, res, next) => {
   userModel.findById(req.user.id)
     .then((user) => {
