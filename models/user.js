@@ -14,17 +14,21 @@ const userSchema = new mongoose.Schema(
     },
     name: {
       type: String,
-      minlength: [2, 'Минимальная длина поля "name" - 2'],
-      maxlength: [30, 'Максимальная длина поля "name" - 30'],
       required: [true, 'Поле "name" должно быть заполнено'],
       default: 'Жак-Ив Кусто',
+      validate: {
+        validator: ({ length }) => length >= 2 && length <= 30,
+        message: 'Username should be from 2 up to 30 symbols!',
+      },
     },
     about: {
       type: String,
-      minlength: [2, 'Минимальная длина поля "name" - 2'],
-      maxlength: [30, 'Максимальная длина поля "name" - 30'],
       required: [true, 'Поле "about" должно быть заполнено'],
       default: 'Исследователь',
+      validate: {
+        validator: ({ length }) => length >= 2 && length <= 30,
+        message: 'User info should be from 2 up to 30 symbols!',
+      },
     },
     avatar: {
       type: String,
