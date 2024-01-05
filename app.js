@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
-
 const helmet = require('helmet');
+const { createUser, login } = require('./controllers/users');
 
 const { router } = require('./routes');
 
@@ -17,14 +17,10 @@ mongoose.connect(`${MONGO_URL}`)
 
 app.use(express.json());
 
-app.use((req, res, next) => {
-  req.user = {
-    _id: '657ae2eea0c268245901e59b',
-  };
-  next();
-});
 app.use(helmet());
 app.use(router);
+app.post('/signin', login);
+app.post('/signup', createUser);
 
 app.listen(PORT, () => {
   console.log(`App listening on port ${PORT}`);

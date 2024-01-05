@@ -3,7 +3,7 @@ const {
   defaultError,
   cardValidationError,
   cardNotValidId,
-} = require('../utils/errors');
+} = require('../error/errors');
 
 const STATUS_OK = 200;
 const STATUS_CREATED = 201;
