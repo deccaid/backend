@@ -18,32 +18,20 @@ const getUsers = (req, res, next) => {
 };
 
 // получить пользователя по определенному ID
-const getUserByID = (req, res) => {
-  const { idUser } = req.params;
-  userModel.findById(idUser)
+const getUserByID = (req, res, next) => {
+  userModel.findById(req.params.userId)
     .then((user) => {
-      if (!user) {
-        return res
-          .status(httpStatusCodes.status)
-          .send({ message: httpStatusCodes.message });
+      if (user) {
+        res.send(user);
+      } else {
+        throw new NotFound('User with current _id can\'t be found!');
       }
-      return res
-        .status(STATUS_OK)
-        .send(user);
     })
-    .catch((error) => {
-      if (error.name === 'CastError') {
-        return res
-          .status(httpStatusCodes.status)
-          .send({ message: httpStatusCodes.message });
-      } if (error.message === 'notValidId') {
-        res
-          .status(httpStatusCodes.status)
-          .send({ message: httpStatusCodes.message });
+    .catch((err) => {
+      if (err.name === 'CastError') {
+        next(new BadRequest('Bad request!'));
       }
-      return res
-        .status(httpStatusCodes.status)
-        .send({ message: httpStatusCodes.message });
+      next(err);
     });
 };
 
