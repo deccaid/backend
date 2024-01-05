@@ -1,131 +1,98 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const userModel = require('../models/user');
-const BadRequest = require('../error/badRequest');
-const NotFound = require('../error/notFound');
-const Conflict = require('../error/conflict');
-const httpStatusCodes = require('../error/errors');
+const User = require('../models/user');
+const BadRequestError = require('../errors/BadRequestError');
+const NotFoundError = require('../errors/notFound');
+const ConflictError = require('../errors/conflict');
+const Created = require('../errors/errors');
 
-const login = (req, res, next) => {
-  const { email, password } = req.body;
-  userModel.findUser(email, password).then((user) => {
-    const token = jwt.sign({ id: user._id }, 'yandex', { expiresIn: '7d' });
-    res.cookie('jwt', token, { maxAge: 1000 * 3600 * 24 * 7, httpOnly: true, domain: '.localhost' });
-    res.status(200).send({ id: user._id });
-  })
-    .catch((err) => {
-      if (err.name === 'Unauthorized') res.status(httpStatusCodes.UNAUTHORIZED).send({ message: err.message });
-      next(err);
-    });
-};
-
-// получить всех пользователя
-const getUsers = (req, res, next) => {
-  userModel.find({})
-    .then((users) => res.send({ users }))
-    .catch(next);
-};
-
-// получить пользователя по определенному ID
-const getUserByID = (req, res, next) => {
-  userModel.findById(req.params.userId)
-    .then((user) => {
-      if (user) {
-        res.send(user);
-      } else {
-        throw new NotFound('User with current _id can\'t be found!');
-      }
-    })
-    .catch((err) => {
-      if (err.name === 'CastError') {
-        next(new BadRequest('Bad request!'));
-      }
-      next(err);
-    });
-};
-
-// создать нового пользователя
-const createUser = (req, res, next) => {
+module.exports.addUser = (req, res, next) => {
   const {
     name, about, avatar, email, password,
   } = req.body;
   bcrypt.hash(password, 10)
-    .then((hashPassword) => userModel.create({
-      name, about, avatar, email, password: hashPassword,
+    .then((hash) => User.create({
+      name, about, avatar, email, password: hash,
     }))
-    .then((user) => {
-      const result = user.toObject();
-      delete result.password;
-      res.status(httpStatusCodes.CREATED).send(result);
-    })
+    .then((user) => res.status(Created).send({
+      name: user.name, about: user.about, avatar: user.avatar, email: user.email, _id: user._id,
+    }))
     .catch((err) => {
-      if (err.name === 'MongoServerError' || err.code === 11000) {
-        next(new Conflict('User with this email already exists!'));
+      if (err.code === 11000) {
+        next(new ConflictError('Пользователь с указанным email уже зарегистрирован'));
+      } else if (err.name === 'ValidationError') {
+        next(new BadRequestError(err.message));
+      } else {
+        next(err);
       }
-      next(err);
     });
 };
 
-// обновить информацию о пользователе
-const updateUserInfo = (req, res, next) => {
+module.exports.login = (req, res, next) => {
+  const { email, password } = req.body;
+  return User.findUserByCredentials(email, password)
+    .then((user) => {
+      const token = jwt.sign({ _id: user._id }, 'some-secret-key', { expiresIn: '7d' });
+      res.send({ token });
+    })
+    .catch((err) => next(err));
+};
+
+module.exports.getUsers = (req, res, next) => {
+  User.find({})
+    .then((users) => res.send(users))
+    .catch((err) => next(err));
+};
+
+module.exports.getUserById = (req, res, next) => {
+  User.findById(req.params.userId)
+    .orFail(new Error('NotFound'))
+    .then((user) => res.send(user))
+    .catch((err) => {
+      if (err.name === 'CastError') {
+        next(new BadRequestError('Некорректный id'));
+      } else if (err.message === 'NotFound') {
+        next(new NotFoundError('Пользоваетль по указанному id не найден'));
+      } else {
+        next(err);
+      }
+    });
+};
+
+module.exports.editDataUser = (req, res, next) => {
   const { name, about } = req.body;
-  userModel.findByIdAndUpdate(req.user.id, { name, about }, { new: true, runValidators: true })
-    .then((user) => {
-      if (user) {
-        res.send({ user });
-      } else {
-        throw new NotFound('User with current _id can\'t be found!');
-      }
-    })
+  User.findByIdAndUpdate(req.user._id, { name, about }, { new: 'true', runValidators: true })
+    .orFail(new Error('NotFound'))
+    .then((user) => res.send(user))
     .catch((err) => {
-      if (err.name === 'CastError') {
-        next(new BadRequest('Bad request!'));
+      if (err.name === 'ValidationError') {
+        next(new BadRequestError(err.message));
+      } else if (err.message === 'NotFound') {
+        next(new NotFoundError('Пользоваетль по указанному id не найден'));
+      } else {
+        next(err);
       }
-      next(err);
     });
 };
 
-// обновить аватар пользователя
-const updateUserAvatar = (req, res, next) => {
+module.exports.editAvatarUser = (req, res, next) => {
   const { avatar } = req.body;
-  userModel.findByIdAndUpdate(req.user.id, { avatar }, { new: true, runValidators: true })
-    .then((user) => {
-      if (user) {
-        res.send({ user });
+  User.findByIdAndUpdate(req.user._id, { avatar }, { new: 'true', runValidators: true })
+    .orFail(new Error('NotFound'))
+    .then((user) => res.send(user))
+    .catch((err) => {
+      if (err.name === 'ValidationError') {
+        next(new BadRequestError(err.message));
+      } else if (err.message === 'NotFound') {
+        next(new NotFoundError('Пользоваетль по указанному id не найден'));
       } else {
-        throw new NotFound('User with current _id can\'t be found!');
+        next(err);
       }
-    })
-    .catch((err) => {
-      if (err.name === 'CastError') {
-        res.status(httpStatusCodes.BAD_REQUEST).send({ message: 'Bad request!' });
-      }
-      next(err);
     });
 };
 
-const getMe = (req, res, next) => {
-  userModel.findById(req.user.id)
-    .then((user) => {
-      if (!user) {
-        throw new NotFound('User with current _id can\'t be found!');
-      }
-      return res.status(httpStatusCodes.OK).send(user);
-    })
-    .catch((err) => {
-      if (err.name === 'CastError') {
-        next(new BadRequest('Bad request!'));
-      }
-      next(err);
-    });
-};
-
-module.exports = {
-  getMe,
-  login,
-  getUsers,
-  getUserByID,
-  createUser,
-  updateUserInfo,
-  updateUserAvatar,
+module.exports.getMyUser = (req, res, next) => {
+  User.findById(req.user._id)
+    .then((user) => res.send(user))
+    .catch((err) => next(err));
 };

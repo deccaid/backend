@@ -1,46 +1,64 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 const validator = require('validator');
+const UnplannedError = require('../errors/unplannedError');
+const urlRegex = require('../utils/index');
 
-const userSchema = new mongoose.Schema(
-  {
-    email: {
-      type: String,
-      required: true,
-    },
-    password: {
-      type: String,
-      required: true,
-      select: false,
-    },
-    name: {
-      type: String,
-      required: [true, 'Поле "name" должно быть заполнено'],
-      default: 'Жак-Ив Кусто',
-      validate: {
-        validator: ({ length }) => length >= 2 && length <= 30,
-        message: 'Username should be from 2 up to 30 symbols!',
+const userSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    default: 'Жак-Ив Кусто',
+    minlength: [2, 'Минимальная длина поля "name" - 2'],
+    maxlength: [30, 'Минимальная длина поля "name" - 30'],
+  },
+  about: {
+    type: String,
+    default: 'Исследователь',
+    minlength: [2, 'Минимальная длина поля "about" - 2'],
+    maxlength: [30, 'Минимальная длина поля "about" - 30'],
+  },
+  avatar: {
+    type: String,
+    default: 'https://pictures.s3.yandex.net/resources/jacques-cousteau_1604399756.png',
+    validate: {
+      validator(url) {
+        return urlRegex.test(url);
       },
+      message: 'Некорректный URL',
     },
-    about: {
-      type: String,
-      required: [true, 'Поле "about" должно быть заполнено'],
-      default: 'Исследователь',
-      validate: {
-        validator: ({ length }) => length >= 2 && length <= 30,
-        message: 'User info should be from 2 up to 30 symbols!',
-      },
-    },
-    avatar: {
-      type: String,
-      default: 'https://pictures.s3.yandex.net/resources/jacques-cousteau_1604399756.png',
-      required: [true, 'Поле "avatar" должно быть заполнено'],
-      validate: {
-        validator: (v) => validator.isURL(v),
-        message: 'Введите корректный URL',
-      },
+
+  },
+  email: {
+    type: String,
+    required: [true, 'Поле "email" обязательно для заполнения'],
+    unique: true,
+    validate: {
+      validator: (email) => validator.isEmail(email),
+      message: 'Некорректный email',
     },
   },
-  { versionKey: false, timestamps: true },
-);
+  password: {
+    type: String,
+    required: [true, 'Поле "password" обязательно для заполнения'],
+    select: false,
+  },
+}, { versionKey: false });
+
+userSchema.statics.findUserByCredentials = function findUserByCredentials(email, password) {
+  return this.findOne({ email })
+    .select('+password')
+    .then((user) => {
+      if (!user) {
+        throw new UnplannedError('Неправильные почта или пароль');
+      }
+      return bcrypt.compare(password, user.password)
+        .then((matched) => {
+          if (!matched) {
+            throw new UnplannedError('Неправильные почта или пароль');
+          }
+          return user;
+        });
+    });
+};
 
 module.exports = mongoose.model('user', userSchema);
