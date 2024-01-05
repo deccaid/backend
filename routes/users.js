@@ -1,4 +1,5 @@
 const { Router } = require('express');
+const { celebrate } = require('celebrate');
 const {
   getUsers,
   createUser,
@@ -8,13 +9,15 @@ const {
   getMe,
 } = require('../controllers/users');
 
+const { updateUserScheme, updateAvatarScheme } = require('../joiSchemes');
+
 const userRouter = Router();
 
 userRouter.get('/', getUsers);
 userRouter.get('/:idUser', getUserByID);
 userRouter.post('/', createUser);
-userRouter.patch('/me', updateUserInfo);
 userRouter.get('/me', getMe);
-userRouter.patch('/me/avatar', updateUserAvatar);
+userRouter.patch('/me', celebrate(updateUserScheme), updateUserInfo);
+userRouter.patch('/me/avatar', celebrate(updateAvatarScheme), updateUserAvatar);
 
 module.exports = { userRouter };
