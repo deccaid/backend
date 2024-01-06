@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const validator = require('validator');
-const UnplannedError = require('../errors/unplannedError');
+const AuthError = require('../errors/autherror');
 
 const userSchema = new mongoose.Schema({
   name: {
@@ -48,12 +48,12 @@ userSchema.statics.findUserByCredentials = function findUserByCredentials(email,
     .select('+password')
     .then((user) => {
       if (!user) {
-        throw new UnplannedError('Неправильные почта или пароль');
+        throw new AuthError('Неправильные почта или пароль');
       }
       return bcrypt.compare(password, user.password)
         .then((matched) => {
           if (!matched) {
-            throw new UnplannedError('Неправильные почта или пароль');
+            throw new AuthError('Неправильные почта или пароль');
           }
           return user;
         });
