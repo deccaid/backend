@@ -1,98 +1,127 @@
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-const User = require('../models/user');
-const BadRequestError = require('../errors/BadRequestError');
-const NotFoundError = require('../errors/notFound');
-const ConflictError = require('../errors/conflict');
-const Created = require('../errors/errors');
+const userModel = require('../models/user');
+const {
+  defaultError,
+  userValidationError,
+  userNotValidId,
+} = require('../utils/errors');
 
-module.exports.addUser = (req, res, next) => {
-  const {
-    name, about, avatar, email, password,
-  } = req.body;
-  bcrypt.hash(password, 10)
-    .then((hash) => User.create({
-      name, about, avatar, email, password: hash,
-    }))
-    .then((user) => res.status(Created).send({
-      name: user.name, about: user.about, avatar: user.avatar, email: user.email, _id: user._id,
-    }))
-    .catch((err) => {
-      if (err.code === 11000) {
-        next(new ConflictError('Пользователь с указанным email уже зарегистрирован'));
-      } else if (err.name === 'ValidationError') {
-        next(new BadRequestError(err.message));
-      } else {
-        next(err);
-      }
-    });
+const STATUS_OK = 200;
+const STATUS_CREATED = 201;
+
+// получить всех пользователя
+const getUsers = (req, res) => {
+  userModel.find()
+    .then((users) => res
+      .status(STATUS_OK)
+      .send(users))
+    .catch(() => res
+      .status(defaultError.status)
+      .send({ message: defaultError.message }));
 };
 
-module.exports.login = (req, res, next) => {
-  const { email, password } = req.body;
-  return User.findUserByCredentials(email, password)
+// получить пользователя по определенному ID
+const getUserByID = (req, res) => {
+  const { idUser } = req.params;
+  userModel.findById(idUser)
     .then((user) => {
-      const token = jwt.sign({ _id: user._id }, 'some-secret-key', { expiresIn: '7d' });
-      res.send({ token });
+      if (!user) {
+        return res
+          .status(userNotValidId.status)
+          .send({ message: userNotValidId.message });
+      }
+      return res
+        .status(STATUS_OK)
+        .send(user);
     })
-    .catch((err) => next(err));
-};
-
-module.exports.getUsers = (req, res, next) => {
-  User.find({})
-    .then((users) => res.send(users))
-    .catch((err) => next(err));
-};
-
-module.exports.getUserById = (req, res, next) => {
-  User.findById(req.params.userId)
-    .orFail(new Error('NotFound'))
-    .then((user) => res.send(user))
-    .catch((err) => {
-      if (err.name === 'CastError') {
-        next(new BadRequestError('Некорректный id'));
-      } else if (err.message === 'NotFound') {
-        next(new NotFoundError('Пользоваетль по указанному id не найден'));
-      } else {
-        next(err);
+    .catch((error) => {
+      if (error.name === 'CastError') {
+        return res
+          .status(userValidationError.status)
+          .send({ message: userValidationError.message });
+      } if (error.message === 'notValidId') {
+        res
+          .status(userNotValidId.status)
+          .send({ message: userNotValidId.message });
       }
+      return res
+        .status(defaultError.status)
+        .send({ message: defaultError.message });
     });
 };
 
-module.exports.editDataUser = (req, res, next) => {
+// создать нового пользователя
+const createUser = (req, res) => {
+  const { name, about, avatar } = req.body;
+  userModel.create({ name, about, avatar })
+    .then((user) => res
+      .status(STATUS_CREATED)
+      .send(user))
+    .catch((error) => {
+      if (error.name === 'ValidationError') {
+        return res
+          .status(userValidationError.status)
+          .send({ message: userValidationError.message });
+      }
+      return res
+        .status(defaultError.status)
+        .send({ message: defaultError.message });
+    });
+};
+
+// обновить информацию о пользователе
+const updateUserInfo = (req, res) => {
   const { name, about } = req.body;
-  User.findByIdAndUpdate(req.user._id, { name, about }, { new: 'true', runValidators: true })
-    .orFail(new Error('NotFound'))
-    .then((user) => res.send(user))
-    .catch((err) => {
-      if (err.name === 'ValidationError') {
-        next(new BadRequestError(err.message));
-      } else if (err.message === 'NotFound') {
-        next(new NotFoundError('Пользоваетль по указанному id не найден'));
-      } else {
-        next(err);
+  console.log(req.user);
+  userModel.findByIdAndUpdate(req.user._id, { name, about }, { runValidators: true, new: true })
+    .then((user) => {
+      res
+        .status(STATUS_OK)
+        .send(user);
+    })
+    .catch((error) => {
+      if (error.name === 'ValidationError') {
+        return res
+          .status(userValidationError.status)
+          .send({ message: userValidationError.message });
+      } if (error.message === 'notValidId') {
+        res
+          .status(userNotValidId.status)
+          .send({ message: userNotValidId.message });
       }
+      return res
+        .status(defaultError.status)
+        .send({ message: defaultError.message });
     });
 };
 
-module.exports.editAvatarUser = (req, res, next) => {
+// обновить аватар пользователя
+const updateUserAvatar = (req, res) => {
   const { avatar } = req.body;
-  User.findByIdAndUpdate(req.user._id, { avatar }, { new: 'true', runValidators: true })
-    .orFail(new Error('NotFound'))
-    .then((user) => res.send(user))
-    .catch((err) => {
-      if (err.name === 'ValidationError') {
-        next(new BadRequestError(err.message));
-      } else if (err.message === 'NotFound') {
-        next(new NotFoundError('Пользоваетль по указанному id не найден'));
-      } else {
-        next(err);
+  console.log(req.user);
+  userModel.findByIdAndUpdate(req.user._id, { avatar }, { runValidators: true, new: true })
+    .then((user) => {
+      res.status(STATUS_OK).send(user);
+    })
+    .catch((error) => {
+      if (error.name === 'CastError') {
+        return res
+          .status(userValidationError.status)
+          .send({ message: userValidationError.message });
+      } if (error.message === 'notValidId') {
+        res
+          .status(userNotValidId.status)
+          .send({ message: userNotValidId.message });
       }
+      return res
+        .status(defaultError.status)
+        .send({ message: defaultError.message });
     });
 };
 
-module.exports.getMyUser = (req, res, next) => {
-  User.findById(req.user._id)
-    .then((user) => res.send(user))
-    .catch((err) => next(err));
+module.exports = {
+  getUsers,
+  getUserByID,
+  createUser,
+  updateUserInfo,
+  updateUserAvatar,
 };
